@@ -1,10 +1,12 @@
-from aiogram import Router, types
+from aiogram import Router, F, types
 from aiogram.filters import CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from aiogram.enums import ParseMode
 
 from database import get_random_task, add_user
+from ai import analyze_code_with_gemini
 
 user_router = Router()
 
@@ -63,7 +65,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.update_data(task_message_id=start_msg.message_id)
 
 
-@user_router.callback_query(lambda c: c.data.startswith("task_"))
+@user_router.callback_query(F.data.startswith("task_"))
 async def handle_task_selection(callback: types.CallbackQuery, state: FSMContext):
     task_number = int(callback.data.split("_")[1])
     task_condition = get_random_task(task_number)
@@ -85,7 +87,7 @@ async def handle_task_selection(callback: types.CallbackQuery, state: FSMContext
         await callback.answer("Произошла ошибка: задача не найдена.", show_alert=True)
 
 
-@user_router.callback_query(lambda c: c.data == "back_to_menu")
+@user_router.callback_query(F.data == "back_to_menu")
 async def handle_back_to_menu(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.answer()
@@ -148,11 +150,23 @@ async def handle_user_code(message: types.Message, state: FSMContext):
         except Exception:
             pass
 
+    task_condition = get_random_task(task_number)
+    waiting_msg = await message.answer("<b>ИИ анализирует твой код... Пожалуйста, подожди несколько секунд.</b>", parse_mode="HTML")
+
     await state.clear()
 
-    await message.answer(
-        f"✅ Код для задания №{task_number} успешно принят на проверку!\n\n"
-        f"Твой код: {user_code}.\n\n"
-        f"Здесь будет ИИ-анализ, который разберет решение.",
+    ai_response = await analyze_code_with_gemini(task_number, task_condition, user_code)
+
+    try:
+        await waiting_msg.delete()
+    except Exception:
+        pass
+
+    result_message = await message.answer(
+    f"*Разбор Задания {task_number}*\n\n"
+        f"{ai_response}",
+        parse_mode=ParseMode.MARKDOWN,
         reply_markup=get_back_keyboard()
     )
+
+    await state.update_data(task_message_id=result_message.message_id)
