@@ -25,6 +25,15 @@ def init_db():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_solutions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            task_number INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+
     cursor.execute("SELECT COUNT(*) FROM tasks")
     if cursor.fetchone()[0] == 0:
         initial_tasks = [
@@ -67,7 +76,7 @@ def init_db():
     conn.close()
 
 
-def get_random_task(task_number: int):
+def get_random_task(task_number):
     conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
 
@@ -81,7 +90,7 @@ def get_random_task(task_number: int):
     return result[0] if result else None
 
 
-def add_user(user_id: int, username: str, first_name: str):
+def add_user(user_id, username, first_name):
     conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
     joined_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -93,3 +102,73 @@ def add_user(user_id: int, username: str, first_name: str):
 
     conn.commit()
     conn.close()
+
+
+def add_task_to_db(task_number, condition):
+    conn = sqlite3.connect(DATABASE_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO tasks (task_number, condition)
+        VALUES (?, ?)
+    """, (task_number, condition))
+
+    conn.commit()
+    conn.close()
+
+
+def get_bot_statistics():
+    conn = sqlite3.connect(DATABASE_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM users")
+    total_users = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM tasks")
+    total_tasks = cursor.fetchone()[0]
+
+    cursor.execute("SELECT task_number, COUNT(*) FROM tasks GROUP BY task_number")
+    tasks_distribution = cursor.fetchall()
+
+    conn.close()
+
+    return {
+        "total_users": total_users,
+        "total_tasks": total_tasks,
+        "distribution": tasks_distribution
+    }
+
+
+def save_user_solution(user_id: int, task_number: int):
+    conn = sqlite3.connect(DATABASE_NAME)
+    cursor = conn.cursor()
+    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    cursor.execute("""
+        INSERT INTO user_solutions (user_id, task_number, created_at)
+        VALUES (?, ?, ?)
+    """, (user_id, task_number, created_at))
+
+    conn.commit()
+    conn.close()
+
+
+def get_user_statistics(user_id):
+    conn = sqlite3.connect(DATABASE_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM user_solutions WHERE user_id = ?", (user_id,))
+    total_attempts = cursor.fetchone()[0]
+
+    cursor.execute(
+        "SELECT task_number, COUNT(*) FROM user_solutions WHERE user_id = ? GROUP BY task_number",
+        (user_id,)
+    )
+    user_distribution = cursor.fetchall()
+
+    conn.close()
+
+    return {
+        "total_attempts": total_attempts,
+        "distribution": user_distribution
+    }
